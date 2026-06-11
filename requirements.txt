@@ -1,3 +1,4 @@
+# Needs Python >=3.10,<3.13 (kokoro's requires-python). Use python3.12.
 fastapi
 uvicorn[standard]
 kokoro>=0.9.4

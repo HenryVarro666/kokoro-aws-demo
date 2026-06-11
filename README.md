@@ -25,9 +25,8 @@ GPU track:  EC2 g5 Spot / SageMaker ──► LoRA adapter ──► merge + CTr
 ## Quickstart (local)
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements.txt
+python3.12 -m venv .venv && source .venv/bin/activate   # kokoro requires Python >=3.10,<3.13
+pip install -r requirements.txt                          # torch comes in as a kokoro dependency
 uvicorn app.main:app --reload    # open http://127.0.0.1:8000
 ```
 
