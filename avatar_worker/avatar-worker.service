@@ -1,0 +1,18 @@
+# systemd unit baked into the golden AMI at /etc/systemd/system/avatar-worker.service
+# CDK user-data writes /etc/avatar-worker.env and runs `systemctl restart avatar-worker`.
+[Unit]
+Description=MuseTalk avatar SQS worker
+After=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+EnvironmentFile=/etc/avatar-worker.env
+Environment=MUSETALK_DIR=/opt/MuseTalk
+# conda env "musetalk" is created on Day 1 of guide 03; adjust the path if yours differs
+ExecStart=/bin/bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate musetalk && exec python /opt/kokoro-aws-demo/avatar_worker/worker.py'
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

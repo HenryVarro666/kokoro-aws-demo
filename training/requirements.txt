@@ -1,0 +1,9 @@
+transformers>=4.49
+datasets<3.0
+accelerate
+peft
+bitsandbytes
+evaluate
+jiwer
+soundfile
+librosa

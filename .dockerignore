@@ -1,0 +1,9 @@
+.venv
+.git
+infra
+tests
+training
+cdk.out
+__pycache__
+*.wav
+.github
