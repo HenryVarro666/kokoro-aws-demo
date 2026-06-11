@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+cdk.out/
+output/
+adapter/
+merged/
+whisper-ct2/
+*.wav
+.DS_Store
+node_modules/
+.pytest_cache/
