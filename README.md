@@ -47,6 +47,10 @@ cdk deploy InfraStack
 # tear down everything: cdk destroy InfraStack
 ```
 
+CI/CD: merges to `main` auto-deploy via GitHub Actions OIDC. Include
+`[skip deploy]` in the commit message to land changes while the stack stays
+destroyed; trigger manual deploys from the Actions tab (`workflow_dispatch`).
+
 ## Before first deploy — replace CHANGE_ME
 
 | File | What | Status |

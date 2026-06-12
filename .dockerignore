@@ -3,7 +3,10 @@
 infra
 tests
 training
+avatar_worker
 cdk.out
 __pycache__
 *.wav
 .github
+LICENSE
+*.md

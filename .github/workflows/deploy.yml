@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:   # manual "deploy now" button in the Actions tab
 
 permissions:
   id-token: write     # required for OIDC
@@ -26,7 +27,12 @@ jobs:
 
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main'
+    # Skip with "[skip deploy]" in the commit message — lets docs/cleanup
+    # commits land while the stack is destroyed without powering it back on.
+    # Manual deploys: Actions tab -> ci-cd -> Run workflow.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message || '', '[skip deploy]')
     # ARM runner: builds the ARM64 image natively (free for public repos).
     # Private repo? Switch to ubuntu-latest + docker/setup-qemu-action.
     runs-on: ubuntu-24.04-arm

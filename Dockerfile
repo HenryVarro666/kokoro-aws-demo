@@ -10,7 +10,9 @@ ENV HF_HOME=/opt/hf
 
 WORKDIR /srv
 COPY requirements.txt .
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+# torch pinned: vocoder output is sensitive to kernel/version changes
+# (see the Graviton numerics incident) — upgrades must be deliberate.
+RUN pip install --no-cache-dir torch==2.12.0 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
 # Trigger one model download so the weights land in an image layer.
