@@ -52,7 +52,7 @@ class SpeechCollator:
 def main():
     args = parse_args()
     configs = [c.strip() for c in args.dataset_config.split(",")]
-    langs = [l.strip() for l in args.language.split(",")]
+    langs = [lang.strip() for lang in args.language.split(",")]
     assert len(configs) == len(langs), "--dataset_config and --language must pair 1:1"
 
     processor = WhisperProcessor.from_pretrained(args.model_id, task="transcribe")
