@@ -52,7 +52,7 @@ cdk deploy InfraStack
 | File | What | Status |
 |------|------|--------|
 | `infra/infra/oidc_stack.py` | `GITHUB_REPO` — your `user/repo` | done |
-| `.github/workflows/deploy.yml` | `ROLE_ARN` — account ID (from `cdk deploy OidcStack` output) | TODO (Phase 1 Day 4) |
+| `.github/workflows/deploy.yml` | `ROLE_ARN` — account ID (from `cdk deploy OidcStack` output) | done |
 | `training/merge_and_convert.sh` | `BUCKET` — your S3 bucket | TODO (Phase 2) |
 | `training/launch_sagemaker.py` | `ROLE`, `BUCKET` | TODO (Phase 2) |
 
