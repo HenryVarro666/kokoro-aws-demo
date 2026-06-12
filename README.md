@@ -56,9 +56,26 @@ cdk deploy InfraStack
 | `training/merge_and_convert.sh` | `BUCKET` — your S3 bucket | TODO (Phase 2) |
 | `training/launch_sagemaker.py` | `ROLE`, `BUCKET` | TODO (Phase 2) |
 
+## Measured performance
+
+Same ~7-second sentence, warm service:
+
+| Environment | RTF (synthesis time ÷ audio duration) |
+|---|---|
+| Apple Silicon dev box (CPU) | 0.11 |
+| Fargate 1 vCPU Graviton | 2.4 |
+| **Fargate 2 vCPU / 4 GB Graviton** | **0.82 — real-time crossed** |
+
+Load test (`hey`, single 2 vCPU task): c=1 → p50 **6.8 s**; c=4 → p50 22 s,
+16/16 HTTP 200, throughput flat at ~0.18 req/s — textbook single-task CPU
+saturation. Scale out with `desired_count`, not bigger tasks.
+
+Observability: CloudWatch alarms (ALB 5xx, CPU > 85%) defined in CDK,
+notifying via SNS email.
+
 ## Cost
 
-~$45/mo always-on (Fargate $28 + ALB $16). `cdk destroy` → $0.
+~$74/mo always-on at 2 vCPU (Fargate $57 + ALB $16). `cdk destroy` → $0.
 Training runs: $2–7 each on g5.xlarge Spot.
 
 ## Roadmap
