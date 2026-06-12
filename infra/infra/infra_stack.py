@@ -46,7 +46,9 @@ class InfraStack(Stack):
         # torch thread; verified by A/B spectral comparison against local runs.
         env = {
             "DNNL_DEFAULT_FPMATH_MODE": "F32",
-            "OMP_NUM_THREADS": "1",
+            # Bisection: F32 held, threads released. If audio stays clean the
+            # culprit was fast-math alone and we keep multi-thread speed.
+            "OMP_NUM_THREADS": "2",
         }
         if avatar is not None:
             env.update({
