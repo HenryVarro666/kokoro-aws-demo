@@ -67,13 +67,14 @@ Same ~7-second sentence, warm service:
 | Fargate 2 vCPU, default math | ~~0.82~~ — retracted: fast-math kernel path audibly degraded the vocoder output |
 | **Fargate 2 vCPU, fp32 + single thread** | **1.48 — audio verified identical to local** (spectral distance 1.67 dB ≈ run-to-run noise floor) |
 
-**War story**: on Graviton with ≥2 vCPU, PyTorch's oneDNN/ACL backend takes a
-multi-threaded fast-math kernel path that audibly corrupts vocoder output
-(-4 dB level, 6.7 dB spectral distance vs identical-image local runs).
-Diagnosed via spectral A/B against a synthesis-randomness baseline and
-same-image bisection; fixed with `DNNL_DEFAULT_FPMATH_MODE=F32` +
-`OMP_NUM_THREADS=1` deployed through the pipeline. Moral: speed numbers
-mean nothing without a quality regression check.
+**War story**: on Graviton, PyTorch's multi-threaded oneDNN/ACL kernel path
+audibly corrupts vocoder output (-4 dB level, 6.7 dB spectral distance vs
+identical-image local runs). Diagnosed via spectral A/B against a
+synthesis-randomness baseline and same-image bisection; a second bisection
+(F32 pinned, threads released) proved the parallel kernel path itself — not
+fast-math — is the culprit. Fix: `OMP_NUM_THREADS=1`, deployed through the
+pipeline. Moral: speed numbers mean nothing without a quality regression
+check.
 
 Load test (`hey`, single 2 vCPU task): c=1 → p50 6.8 s; c=4 → p50 22 s,
 16/16 HTTP 200, throughput flat — textbook single-task CPU saturation.
