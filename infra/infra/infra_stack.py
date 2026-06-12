@@ -40,14 +40,20 @@ class InfraStack(Stack):
             "..", platform=ecr_assets.Platform.LINUX_ARM64
         )
 
-        # Phase 3 (optional): point the API at the avatar pipeline resources.
-        env = {}
+        # Audio-quality fix: on Graviton, multi-threaded oneDNN/ACL kernels
+        # (enabled once the task has >=2 vCPU) audibly degrade the vocoder
+        # output (-4 dB level, spectral artifacts). Pin fp32 math and a single
+        # torch thread; verified by A/B spectral comparison against local runs.
+        env = {
+            "DNNL_DEFAULT_FPMATH_MODE": "F32",
+            "OMP_NUM_THREADS": "1",
+        }
         if avatar is not None:
-            env = {
+            env.update({
                 "AVATAR_BUCKET": avatar.bucket.bucket_name,
                 "AVATAR_QUEUE_URL": avatar.queue.queue_url,
                 "AVATAR_TABLE": avatar.table.table_name,
-            }
+            })
 
         service = patterns.ApplicationLoadBalancedFargateService(
             self, "TtsService",
