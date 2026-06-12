@@ -11,7 +11,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  ROLE_ARN: arn:aws:iam::CHANGE_ME:role/github-deploy-kokoro
+  ROLE_ARN: arn:aws:iam::531594843903:role/github-deploy-kokoro
 
 jobs:
   test:
