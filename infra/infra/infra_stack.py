@@ -44,11 +44,14 @@ class InfraStack(Stack):
         # (enabled once the task has >=2 vCPU) audibly degrade the vocoder
         # output (-4 dB level, spectral artifacts). Pin fp32 math and a single
         # torch thread; verified by A/B spectral comparison against local runs.
+        # Bisection verdict (2026-06-12): degradation tracks OMP_NUM_THREADS
+        # exactly (6.7 dB spectral distance at 2 threads even with F32 pinned;
+        # 1.67 dB at 1 thread). Culprit is the parallel oneDNN/ACL kernel path
+        # on Graviton, not fast-math. Single thread is mandatory for clean
+        # audio; F32 kept as cheap insurance. Honest RTF at 2 vCPU: 1.48.
         env = {
             "DNNL_DEFAULT_FPMATH_MODE": "F32",
-            # Bisection: F32 held, threads released. If audio stays clean the
-            # culprit was fast-math alone and we keep multi-thread speed.
-            "OMP_NUM_THREADS": "2",
+            "OMP_NUM_THREADS": "1",
         }
         if avatar is not None:
             env.update({
