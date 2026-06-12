@@ -2,10 +2,15 @@ from aws_cdk import (
     CfnOutput,
     Duration,
     Stack,
+    aws_cloudwatch as cloudwatch,
+    aws_cloudwatch_actions as cw_actions,
     aws_ec2 as ec2,
     aws_ecr_assets as ecr_assets,
     aws_ecs as ecs,
     aws_ecs_patterns as patterns,
+    aws_elasticloadbalancingv2 as elbv2,
+    aws_sns as sns,
+    aws_sns_subscriptions as subs,
 )
 from constructs import Construct
 
@@ -73,6 +78,30 @@ class InfraStack(Stack):
             avatar.bucket.grant_read_write(task_role)
             avatar.queue.grant_send_messages(task_role)
             avatar.table.grant_read_write_data(task_role)
+
+        # Observability: alarms as code, email via SNS (confirm the subscription
+        # email once after first deploy).
+        alarm_topic = sns.Topic(self, "AlarmTopic")
+        alarm_topic.add_subscription(
+            subs.EmailSubscription("ccao2679@terpmail.umd.edu"))
+
+        cloudwatch.Alarm(
+            self, "Alb5xx",
+            metric=service.load_balancer.metrics.http_code_target(
+                elbv2.HttpCodeTarget.TARGET_5XX_COUNT,
+                period=Duration.minutes(5), statistic="Sum"),
+            threshold=1, evaluation_periods=1,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            alarm_description="TTS service returned 5xx",
+        ).add_alarm_action(cw_actions.SnsAction(alarm_topic))
+
+        cloudwatch.Alarm(
+            self, "ServiceCpuHigh",
+            metric=service.service.metric_cpu_utilization(period=Duration.minutes(5)),
+            threshold=85, evaluation_periods=2,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            alarm_description="TTS service CPU > 85% for 10 minutes",
+        ).add_alarm_action(cw_actions.SnsAction(alarm_topic))
 
         CfnOutput(self, "DemoUrl",
                   value=f"http://{service.load_balancer.load_balancer_dns_name}")
