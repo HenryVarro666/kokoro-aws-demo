@@ -64,11 +64,20 @@ Same ~7-second sentence, warm service:
 |---|---|
 | Apple Silicon dev box (CPU) | 0.11 |
 | Fargate 1 vCPU Graviton | 2.4 |
-| **Fargate 2 vCPU / 4 GB Graviton** | **0.82 — real-time crossed** |
+| Fargate 2 vCPU, default math | ~~0.82~~ — retracted: fast-math kernel path audibly degraded the vocoder output |
+| **Fargate 2 vCPU, fp32 + single thread** | **1.48 — audio verified identical to local** (spectral distance 1.67 dB ≈ run-to-run noise floor) |
 
-Load test (`hey`, single 2 vCPU task): c=1 → p50 **6.8 s**; c=4 → p50 22 s,
-16/16 HTTP 200, throughput flat at ~0.18 req/s — textbook single-task CPU
-saturation. Scale out with `desired_count`, not bigger tasks.
+**War story**: on Graviton with ≥2 vCPU, PyTorch's oneDNN/ACL backend takes a
+multi-threaded fast-math kernel path that audibly corrupts vocoder output
+(-4 dB level, 6.7 dB spectral distance vs identical-image local runs).
+Diagnosed via spectral A/B against a synthesis-randomness baseline and
+same-image bisection; fixed with `DNNL_DEFAULT_FPMATH_MODE=F32` +
+`OMP_NUM_THREADS=1` deployed through the pipeline. Moral: speed numbers
+mean nothing without a quality regression check.
+
+Load test (`hey`, single 2 vCPU task): c=1 → p50 6.8 s; c=4 → p50 22 s,
+16/16 HTTP 200, throughput flat — textbook single-task CPU saturation.
+Scale out with `desired_count`, not bigger tasks.
 
 Observability: CloudWatch alarms (ALB 5xx, CPU > 85%) defined in CDK,
 notifying via SNS email.
