@@ -17,9 +17,12 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--model_id", default="openai/whisper-large-v3")
     p.add_argument("--dataset", default="google/fleurs")
-    p.add_argument("--dataset_config", default="cmn_hans_cn")
-    p.add_argument("--language", default="zh")
-    p.add_argument("--train_samples", type=int, default=2000)
+    p.add_argument("--dataset_config", default="cmn_hans_cn,en_us",
+                   help="Comma-separated FLEURS configs, paired 1:1 with --language.")
+    p.add_argument("--language", default="zh,en",
+                   help="Comma-separated Whisper language codes, paired with configs.")
+    p.add_argument("--train_samples", type=int, default=2000,
+                   help="Samples PER language config (2 configs x 2000 = 4000 total).")
     p.add_argument("--epochs", type=float, default=3.0)
     p.add_argument("--batch_size", type=int, default=8)
     p.add_argument("--use_8bit", action="store_true")
@@ -48,23 +51,40 @@ class SpeechCollator:
 
 def main():
     args = parse_args()
-    processor = WhisperProcessor.from_pretrained(
-        args.model_id, language=args.language, task="transcribe"
-    )
+    configs = [c.strip() for c in args.dataset_config.split(",")]
+    langs = [l.strip() for l in args.language.split(",")]
+    assert len(configs) == len(langs), "--dataset_config and --language must pair 1:1"
 
-    ds = load_dataset(args.dataset, args.dataset_config,
-                      split=f"train[:{args.train_samples}]", trust_remote_code=True)
-    ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+    processor = WhisperProcessor.from_pretrained(args.model_id, task="transcribe")
 
-    def prepare(batch):
-        audio = batch["audio"]
-        batch["input_features"] = processor.feature_extractor(
-            audio["array"], sampling_rate=16000
-        ).input_features[0]
-        batch["labels"] = processor.tokenizer(batch["transcription"]).input_ids
-        return batch
+    # Mixed-language training: each sample's labels must carry its OWN
+    # language token (<|zh|>/<|en|>), so tokenize per config with the
+    # prefix set accordingly, then concatenate and shuffle.
+    parts = []
+    for config, lang in zip(configs, langs):
+        ds = load_dataset(args.dataset, config,
+                          split=f"train[:{args.train_samples}]",
+                          trust_remote_code=True)
+        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+        processor.tokenizer.set_prefix_tokens(language=lang, task="transcribe")
 
-    ds = ds.map(prepare, remove_columns=ds.column_names, num_proc=2)
+        def prepare(batch):
+            audio = batch["audio"]
+            batch["input_features"] = processor.feature_extractor(
+                audio["array"], sampling_rate=16000
+            ).input_features[0]
+            batch["labels"] = processor.tokenizer(batch["transcription"]).input_ids
+            return batch
+
+        parts.append(ds.map(prepare, remove_columns=ds.column_names, num_proc=2))
+        print(f"[data] {config} ({lang}): {len(parts[-1])} samples")
+
+    if len(parts) > 1:
+        from datasets import concatenate_datasets
+        ds = concatenate_datasets(parts).shuffle(seed=42)
+    else:
+        ds = parts[0]
+    print(f"[data] total training samples: {len(ds)}")
 
     quant = BitsAndBytesConfig(load_in_8bit=True) if args.use_8bit else None
     model = WhisperForConditionalGeneration.from_pretrained(
