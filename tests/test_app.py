@@ -28,3 +28,10 @@ def test_avatar_503_when_pipeline_not_deployed():
     with TestClient(app) as client:
         assert client.post("/avatar", json={"text": "hi"}).status_code == 503
         assert client.get("/avatar/abc123").status_code == 503
+
+
+def test_transcribe_requires_file():
+    # Contract check only — missing upload is rejected by FastAPI validation
+    # before the ASR model is ever loaded (no model download in CI).
+    with TestClient(app) as client:
+        assert client.post("/transcribe").status_code == 422

@@ -64,7 +64,7 @@ class InfraStack(Stack):
             self, "TtsService",
             cluster=cluster,
             cpu=2048,                 # 2 vCPU (RTF experiment: 1 vCPU measured RTF 2.4)
-            memory_limit_mib=4096,    # 4 GB (Fargate: 2 vCPU requires >= 4 GB)
+            memory_limit_mib=6144,    # 6 GB — headroom for TTS (Kokoro) + ASR (Whisper base) loaded together
             desired_count=1,
             # Graviton ARM64: ~20% cheaper than x86 and matches Apple Silicon builds.
             runtime_platform=ecs.RuntimePlatform(

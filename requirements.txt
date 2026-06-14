@@ -6,3 +6,5 @@ misaki[zh]>=0.9.4
 soundfile
 numpy
 boto3
+faster-whisper
+python-multipart

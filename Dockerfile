@@ -15,8 +15,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir torch==2.12.0 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
-# Trigger one model download so the weights land in an image layer.
+# Bake model weights into image layers (TTS + base ASR) so deploy == ready,
+# no startup-time downloads.
 RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='a')"
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base', device='cpu', compute_type='int8')"
 
 COPY app ./app
 EXPOSE 8000
