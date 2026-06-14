@@ -79,6 +79,11 @@ class InfraStack(Stack):
             task_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
             # Model loads at container startup; give the ALB health check a buffer.
             health_check_grace_period=Duration.seconds(120),
+            # Bad image fails fast and auto-rolls-back (default: deploys can hang
+            # ~3h). min 100% keeps the old task serving until the new one is healthy.
+            circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
+            min_healthy_percent=100,
+            max_healthy_percent=200,
         )
         service.target_group.configure_health_check(
             path="/health", healthy_threshold_count=2, interval=Duration.seconds(30)

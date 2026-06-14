@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Defense-in-depth vs the "training commit redeployed prod" incident:
+    # commits touching ONLY these paths don't trigger CI at all.
+    paths-ignore:
+      - '**.md'
+      - 'training/**'
+      - 'avatar_worker/**'
+      - 'LICENSE'
   workflow_dispatch:   # manual "deploy now" button in the Actions tab
 
 permissions:
