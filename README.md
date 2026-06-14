@@ -16,11 +16,14 @@ GPU track:  EC2 g5 Spot / SageMaker ──► LoRA adapter ──► merge + CTr
 
 ## Stack
 
-- **Serving**: FastAPI + Kokoro-82M, Docker, ECS Fargate (ARM64/Graviton), ALB
-- **IaC**: AWS CDK (Python) — VPC (no NAT), cluster, service, health checks
+- **Serving**: FastAPI on ECS Fargate (ARM64/Graviton) behind an ALB
+  - `POST /synthesize` — Kokoro-82M TTS (text → speech)
+  - `POST /transcribe` — faster-whisper **base** ASR on CPU (speech → text), no GPU needed
+- **IaC**: AWS CDK (Python) — VPC (no NAT), cluster, service, health checks, CloudWatch alarms
 - **CI/CD**: GitHub Actions with OIDC role federation (zero long-lived secrets)
-- **Training**: Whisper-large-v3 + LoRA (PEFT, 8-bit base) on g5.xlarge Spot / SageMaker
-- **Inference optimization**: LoRA merge → CTranslate2 int8 → faster-whisper on CPU
+- **Training (deferred)**: Whisper-large-v3 + LoRA (PEFT, 8-bit) on g5.xlarge Spot / SageMaker.
+  The serving path above runs the base model today; a fine-tuned, CTranslate2-int8 model
+  drops in later via the `ASR_MODEL` env var with zero code change.
 
 ## Quickstart (local)
 

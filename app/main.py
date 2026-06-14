@@ -4,12 +4,14 @@ from contextlib import asynccontextmanager
 
 import numpy as np
 import soundfile as sf
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 SAMPLE_RATE = 24000  # Kokoro outputs 24 kHz
+ASR_MODEL = os.environ.get("ASR_MODEL", "base")  # faster-whisper base, CPU int8
 _pipelines = {}
+_asr = {}
 
 
 def get_pipeline(lang_code: str):
@@ -59,6 +61,35 @@ def _tts_wav(text: str, voice: str, lang: str, speed: float) -> bytes:
 def synthesize(req: SynthRequest):
     return Response(_tts_wav(req.text, req.voice, req.lang, req.speed),
                     media_type="audio/wav")
+
+
+# ---------- ASR: speech -> text (base Whisper, CPU, no GPU / no fine-tuning) ----------
+# Phase 2 split: this serves the BASE model now. Swap in a LoRA-fine-tuned,
+# CTranslate2-converted model later (set ASR_MODEL to its path) with zero
+# code change — the GPU training is deferred, the serving path is live today.
+def get_asr():
+    if "m" not in _asr:
+        from faster_whisper import WhisperModel  # lazy: CI/tests don't load it
+        # cpu_threads set explicitly so it is unaffected by OMP_NUM_THREADS=1
+        # (that env var exists only to keep the Kokoro/torch vocoder clean).
+        _asr["m"] = WhisperModel(ASR_MODEL, device="cpu", compute_type="int8",
+                                 cpu_threads=2)
+    return _asr["m"]
+
+
+@app.post("/transcribe")
+async def transcribe(file: UploadFile = File(...), language: str | None = None):
+    import tempfile
+
+    suffix = os.path.splitext(file.filename or "")[1] or ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp.flush()
+        # language=None lets Whisper auto-detect; pass "zh"/"en" to force.
+        segments, info = get_asr().transcribe(tmp.name, language=language)
+        text = "".join(seg.text for seg in segments).strip()
+    return {"text": text, "language": info.language,
+            "language_probability": round(info.language_probability, 3)}
 
 
 # ---------- Phase 3: avatar pipeline (TTS -> SQS -> GPU worker -> MP4) ----------
@@ -174,7 +205,16 @@ def index():
   <div class="status" id="s"></div>
   <div class="metrics" id="m"><span id="m1"></span><span id="m2"></span><span id="m3"></span></div>
   <audio id="a" controls></audio>
-  <div class="foot">text &rarr; mel &rarr; waveform &middot; 24 kHz</div>
+  <hr style="border:0;border-top:1px solid rgba(255,255,255,.08);margin:24px 0">
+  <h1 style="font-size:18px">语音转写 Transcribe <span style="font-size:12px;color:#8da3bf">(base Whisper, CPU)</span></h1>
+  <div class="row">
+    <input id="f" type="file" accept="audio/*"
+      style="flex:1;min-width:200px;color:#8da3bf;font-size:13px">
+    <button id="tx" onclick="tx()">转写 Transcribe</button>
+  </div>
+  <div class="status" id="ts"></div>
+  <div id="tr" style="margin-top:8px;font-size:15px;line-height:1.5"></div>
+  <div class="foot">text &rarr; mel &rarr; waveform &middot; 24 kHz &nbsp;|&nbsp; speech &rarr; text</div>
 </div>
 <script>
 async function go(){
@@ -198,6 +238,22 @@ async function go(){
     };
     a.play();
   }catch(e){s.textContent="请求失败："+e.message;}
+  finally{btn.disabled=false;}
+}
+async function tx(){
+  const btn=document.getElementById("tx"), ts=document.getElementById("ts"),
+        tr=document.getElementById("tr"), f=document.getElementById("f");
+  if(!f.files.length){ts.textContent="先选一个音频文件";return;}
+  btn.disabled=true; ts.textContent="转写中…"; tr.textContent="";
+  const fd=new FormData(); fd.append("file", f.files[0]);
+  const t0=performance.now();
+  try{
+    const r=await fetch("/transcribe",{method:"POST",body:fd});
+    if(!r.ok){ts.textContent="出错了：HTTP "+r.status;return;}
+    const j=await r.json(), ms=Math.round(performance.now()-t0);
+    ts.textContent="检测语言 "+j.language+" ("+j.language_probability+") · "+ms+" ms";
+    tr.textContent=j.text;
+  }catch(e){ts.textContent="请求失败："+e.message;}
   finally{btn.disabled=false;}
 }
 </script></body></html>"""

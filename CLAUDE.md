@@ -45,8 +45,9 @@ python train.py --model_id openai/whisper-tiny --train_samples 32 --epochs 1 --b
 
 ## Layout
 
-- `app/` — FastAPI + Kokoro TTS service (+ dormant `/avatar` endpoints, 503 until
-  AvatarStack is deployed)
+- `app/` — FastAPI service: `/synthesize` (Kokoro TTS), `/transcribe` (faster-whisper
+  base ASR, CPU — base model now, fine-tuned model swaps in via `ASR_MODEL` env),
+  `/avatar` (dormant, 503 until AvatarStack is deployed)
 - `infra/` — CDK (Python): InfraStack (Fargate/ALB/alarms), OidcStack (CI trust),
   AvatarStack (Phase 3, context-gated)
 - `training/` — Whisper LoRA: train.py / evaluate_cer.py (CER for zh, WER for en) /
