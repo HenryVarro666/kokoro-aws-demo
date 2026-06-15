@@ -124,8 +124,10 @@ def main():
             handle(msg)
             sqs.delete_message(QueueUrl=QUEUE_URL,
                                ReceiptHandle=msg["ReceiptHandle"])
-        except Exception:
-            pass  # leave the message; visibility timeout + DLQ govern retries
+        except Exception as e:
+            # Leave the message undeleted; visibility timeout + DLQ govern
+            # retries. Log it — don't swallow silently, or failures are invisible.
+            print(f"[loop-error] {e}", flush=True)
         idle_since = time.time()
 
 

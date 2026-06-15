@@ -67,9 +67,14 @@ class AvatarStack(Stack):
         self.bucket.grant_read_write(role)
         self.queue.grant_consume_messages(role)
         self.table.grant_read_write_data(role)
-        # worker scales itself to 0 when idle
+        # worker scales itself to 0 when idle — scoped to THIS named ASG only
+        # (literal ARN by name avoids the role<->ASG circular dependency).
         role.add_to_policy(iam.PolicyStatement(
-            actions=["autoscaling:SetDesiredCapacity"], resources=["*"]))
+            actions=["autoscaling:SetDesiredCapacity"],
+            resources=[
+                f"arn:aws:autoscaling:{self.region}:{self.account}:"
+                "autoScalingGroup:*:autoScalingGroupName/avatar-worker"
+            ]))
         # SSM Session Manager: shell into the worker without opening SSH
         role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name(
             "AmazonSSMManagedInstanceCore"))

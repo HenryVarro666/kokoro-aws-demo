@@ -7,8 +7,8 @@ fine-tuning track (Whisper-large-v3 + LoRA) that feeds a CPU-served ASR endpoint
 git push ──► GitHub Actions (OIDC, no stored AWS keys)
                └─► cdk deploy
                      ├─► ECR  (Docker image, model weights baked in)
-                     └─► ECS Fargate (Graviton ARM64, 1 vCPU / 2 GB)
-                           └─► ALB ──► browser demo  (type text → hear speech)
+                     └─► ECS Fargate (Graviton ARM64, 2 vCPU / 6 GB)
+                           └─► ALB ──► browser demo  (TTS + speech-to-text)
 
 GPU track:  EC2 g5 Spot / SageMaker ──► LoRA adapter ──► merge + CTranslate2 int8
             (train on GPU)                               (serve on CPU Fargate)
@@ -98,8 +98,15 @@ Training runs: $2–7 each on g5.xlarge Spot.
 ## Roadmap
 
 - [x] Phase 1 — TTS service: Fargate + CDK + OIDC CI/CD
-- [ ] Phase 2 — `/transcribe` endpoint backed by LoRA-fine-tuned Whisper (CT2 int8, CPU)
+- [x] Phase 2a (serving) — `/transcribe` live on base Whisper (faster-whisper, CPU)
+- [ ] Phase 2b (training) — swap in a LoRA-fine-tuned, CT2-int8 model via `ASR_MODEL`
+      (deferred until GPU quota; `training/` scripts ready)
 - [ ] Phase 3 — talking-head avatar (MuseTalk): `POST /avatar` → SQS → scale-to-zero
       GPU worker (g4dn Spot ASG, golden AMI) → MP4 via presigned URL.
       Code is in place (`avatar_worker/`, `infra/infra/avatar_stack.py`); deploy with
       `cdk deploy --context avatar=true --context avatar_ami=ami-XXX --all`
+
+## Docs & License
+
+- `CLAUDE.md` — architecture notes and load-bearing constraints for contributors/agents.
+- Licensed under the MIT License — see [LICENSE](LICENSE).

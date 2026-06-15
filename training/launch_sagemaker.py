@@ -8,6 +8,12 @@ from sagemaker.huggingface import HuggingFace
 ROLE = "arn:aws:iam::CHANGE_ME:role/CHANGE_ME-SageMakerExecutionRole"
 BUCKET = "CHANGE_ME"  # e.g. yourname-whisper-finetune
 
+if "CHANGE_ME" in ROLE or "CHANGE_ME" in BUCKET:
+    raise SystemExit(
+        "Edit ROLE and BUCKET in launch_sagemaker.py first "
+        "(replace the CHANGE_ME placeholders with your SageMaker execution "
+        "role ARN and S3 bucket).")
+
 session = sagemaker.Session()
 
 estimator = HuggingFace(
