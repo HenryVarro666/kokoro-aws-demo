@@ -35,3 +35,13 @@ def test_transcribe_requires_file():
     # before the ASR model is ever loaded (no model download in CI).
     with TestClient(app) as client:
         assert client.post("/transcribe").status_code == 422
+
+
+def test_transcribe_is_sync():
+    # Regression guard: transcribe MUST stay a sync def. faster-whisper is
+    # CPU-bound/blocking; an async def would starve the event loop and make
+    # /health hang during a long transcription (ALB then kills the task).
+    import inspect
+
+    from app.main import transcribe
+    assert not inspect.iscoroutinefunction(transcribe)

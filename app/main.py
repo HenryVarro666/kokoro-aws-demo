@@ -77,13 +77,17 @@ def get_asr():
     return _asr["m"]
 
 
+# Sync def (not async): faster-whisper transcription is CPU-bound and blocking.
+# FastAPI runs sync endpoints in a threadpool, so a long transcription can't
+# starve the event loop (which would make /health hang -> ALB kills the task).
+# Same reasoning as /synthesize. See 01_附录_Day1 for the failure mode.
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), language: str | None = None):
+def transcribe(file: UploadFile = File(...), language: str | None = None):
     import tempfile
 
     suffix = os.path.splitext(file.filename or "")[1] or ".wav"
     with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
-        tmp.write(await file.read())
+        tmp.write(file.file.read())  # sync read of the underlying file object
         tmp.flush()
         # language=None lets Whisper auto-detect; pass "zh"/"en" to force.
         segments, info = get_asr().transcribe(tmp.name, language=language)

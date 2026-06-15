@@ -10,3 +10,8 @@ whisper-ct2/
 .DS_Store
 node_modules/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+*.env
+!.env.example

@@ -5,6 +5,11 @@ set -euo pipefail
 
 BUCKET="CHANGE_ME"  # e.g. yourname-whisper-finetune
 
+if [[ "$BUCKET" == "CHANGE_ME" ]]; then
+  echo "error: set BUCKET in merge_and_convert.sh first (replace CHANGE_ME with your S3 bucket)." >&2
+  exit 1
+fi
+
 aws s3 sync "s3://${BUCKET}/whisper-lora/adapter/" ./adapter/
 
 python - <<'PY'
