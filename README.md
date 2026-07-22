@@ -1,112 +1,239 @@
-# kokoro-aws-demo
+<div align="center">
 
-Open-source TTS (Kokoro-82M) served as a production-style API on AWS — plus a GPU
-fine-tuning track (Whisper-large-v3 + LoRA) that feeds a CPU-served ASR endpoint.
+# 🎙️ kokoro-aws-demo
 
+**Open-weight speech AI — TTS *and* ASR — shipped as a production-style service on AWS.**
+
+Kokoro-82M text-to-speech on **ECS Fargate / Graviton**, a CPU Whisper transcription endpoint,
+100% **AWS CDK** infrastructure, and **keyless OIDC CI/CD** — plus a GPU **LoRA fine-tuning** track
+and a scale-to-zero avatar pipeline.
+
+[![CI](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900)
+![Graviton](https://img.shields.io/badge/Graviton-ARM64-0091BD?logo=arm&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-3DA639)
+
+<img src="docs/demo.png" alt="Kokoro TTS + Whisper ASR browser demo, served from a single AWS Fargate task" width="680">
+
+<sub><em>One Fargate task, one page: type text → hear 24 kHz speech, or upload audio → get a transcript. Bilingual (EN/中文).</em></sub>
+
+</div>
+
+---
+
+## At a glance
+
+|  |  |
+|---|---|
+| **Serving** | FastAPI on **ECS Fargate** (ARM64 / Graviton), 2 vCPU · 6 GB, behind an Application Load Balancer |
+| **Endpoints** | `POST /synthesize` (Kokoro-82M TTS) · `POST /transcribe` (Whisper ASR, CPU) · `POST /avatar` (async, Phase 3) |
+| **IaC** | **100% AWS CDK (Python)** — VPC, ECS, ALB, health checks, CloudWatch alarms, IAM, SQS/DynamoDB/ASG |
+| **CI/CD** | **GitHub Actions + OIDC** role federation — zero long-lived AWS keys in the repo |
+| **Observability** | CloudWatch alarms (ALB 5xx · CPU > 85%) → SNS email, all defined as code |
+| **ML track** *(built, not yet run at scale)* | Whisper + **LoRA** (PEFT) → **CTranslate2 int8**, bilingual zh/en — hot-swaps into CPU serving via `ASR_MODEL` |
+| **Cost** | **~$74/mo** always-on · `cdk destroy` → **$0** · training runs $2–7 each on Spot |
+
+---
+
+## Architecture
+
+From `git push` to a live URL, with no AWS keys ever stored in the repo:
+
+```mermaid
+flowchart LR
+    A(["git push → main"]) --> B
+    subgraph ci ["GitHub Actions · OIDC federation (no stored keys)"]
+        B["pytest"] --> C["cdk deploy"]
+    end
+    C --> D[("ECR<br/>ARM64 image<br/>model weights baked in")]
+    subgraph aws ["AWS · us-east-1"]
+        E["ECS Fargate service<br/>Graviton · 2 vCPU / 6 GB<br/>FastAPI: /synthesize · /transcribe"]
+        F(["Application<br/>Load Balancer"]) --> E
+        G["CloudWatch alarms<br/>ALB 5xx · CPU &gt; 85%"] -.-> H(["SNS email"])
+    end
+    D --> E
+    U(["🌐 browser demo"]) --> F
 ```
-git push ──► GitHub Actions (OIDC, no stored AWS keys)
-               └─► cdk deploy
-                     ├─► ECR  (Docker image, model weights baked in)
-                     └─► ECS Fargate (Graviton ARM64, 2 vCPU / 6 GB)
-                           └─► ALB ──► browser demo  (TTS + speech-to-text)
 
-GPU track:  EC2 g5 Spot / SageMaker ──► LoRA adapter ──► merge + CTranslate2 int8
-            (train on GPU)                               (serve on CPU Fargate)
-```
+### Endpoints
 
-## Stack
+| Endpoint | Model | Device | Status |
+|---|---|---|---|
+| `POST /synthesize` | Kokoro-82M (open-weight TTS) → 24 kHz WAV | CPU (Graviton) | ✅ live |
+| `POST /transcribe` | faster-whisper `base`, int8 (speech → text) | CPU (Graviton) | ✅ live |
+| `POST /avatar` + `GET /avatar/{id}` | MuseTalk talking-head → MP4 | GPU (g4dn Spot) | 💤 503 until `AvatarStack` is deployed |
+| `GET /health` | — | — | ✅ ALB target health check |
 
-- **Serving**: FastAPI on ECS Fargate (ARM64/Graviton) behind an ALB
-  - `POST /synthesize` — Kokoro-82M TTS (text → speech)
-  - `POST /transcribe` — faster-whisper **base** ASR on CPU (speech → text), no GPU needed
-- **IaC**: AWS CDK (Python) — VPC (no NAT), cluster, service, health checks, CloudWatch alarms
-- **CI/CD**: GitHub Actions with OIDC role federation (zero long-lived secrets)
-- **Training (deferred)**: Whisper-large-v3 + LoRA (PEFT, 8-bit) on g5.xlarge Spot / SageMaker.
-  The serving path above runs the base model today; a fine-tuned, CTranslate2-int8 model
-  drops in later via the `ASR_MODEL` env var with zero code change.
+---
+
+## ⚡ Engineering war story — the Graviton vocoder bug
+
+> On Graviton, PyTorch's **multi-threaded oneDNN/ACL kernel path audibly corrupts the vocoder output**
+> (−4 dB level, **6.7 dB spectral distance** vs. identical local runs). I caught it because a "faster"
+> 2 vCPU config *sounded wrong*, not because a test failed.
+
+Diagnosed by **spectral A/B** against a synthesis-randomness baseline plus **same-image bisection**. A second
+bisection (fp32 pinned, threads released) proved the *parallel kernel path itself* — not fast-math — was the
+culprit: degradation tracks `OMP_NUM_THREADS` exactly (6.7 dB at 2 threads, **1.67 dB at 1 thread ≈ run-to-run
+noise floor**). **Fix:** `OMP_NUM_THREADS=1`, shipped through the pipeline.
+
+Same ~7-second sentence, warm service:
+
+| Environment | RTF (synth time ÷ audio duration) | Audio quality |
+|---|---|---|
+| Apple Silicon dev box (CPU) | **0.11** | reference |
+| Fargate 1 vCPU Graviton | 2.4 | clean |
+| Fargate 2 vCPU, default math | ~~0.82~~ | ❌ **retracted** — vocoder audibly degraded |
+| **Fargate 2 vCPU, fp32 + single thread** | **1.48** | ✅ verified identical (1.67 dB ≈ noise floor) |
+
+**Load test** (`hey`, single 2 vCPU task): `c=1 →` p50 6.8 s; `c=4 →` p50 22 s, 16/16 HTTP 200, throughput flat —
+textbook single-task CPU saturation. **Scale out with `desired_count`, not bigger tasks.**
+
+---
+
+## Engineering decisions & trade-offs
+
+The "why" behind the code — each of these is a deliberate call, not a default:
+
+| Decision | Why |
+|---|---|
+| **`OMP_NUM_THREADS=1` on Graviton** | Multi-threaded kernels corrupt the vocoder (see war story). fp32 kept as cheap insurance. |
+| **NAT-less VPC** (public subnets) | A NAT gateway is ~$32/mo — the classic beginner bill trap. Tasks pull images via public IP instead. |
+| **OIDC, not access keys** | Actions assumes a repo-scoped role via web identity — no long-lived secrets to leak or rotate. |
+| **Model weights baked into the image** | Deploy == ready: no cold-start downloads, and rollback is just switching an image tag. |
+| **Circuit breaker + auto-rollback** | A bad image fails fast and reverts instead of hanging ~3h; `min 100%` keeps the old task serving. |
+| **`paths-ignore` on docs & training** | Defense-in-depth after a "training commit redeployed prod" incident — ML/doc commits never touch the live service. |
+| **`/transcribe` is a *sync* def** | faster-whisper is CPU-bound/blocking; a sync endpoint runs in FastAPI's threadpool so a long job can't starve the event loop and hang `/health` (which would make the ALB kill the task). Guarded by a regression test. Its `cpu_threads=2` is pinned separately from the vocoder's `OMP_NUM_THREADS=1`. |
+| **Scale-to-zero GPU worker** | The Phase-3 avatar ASG runs **0** instances when idle; a g4dn Spot spins up only on SQS depth, then scales *itself* back to 0. |
+
+---
 
 ## Quickstart (local)
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate   # kokoro requires Python >=3.10,<3.13
-pip install -r requirements.txt                          # torch comes in as a kokoro dependency
-uvicorn app.main:app --reload    # open http://127.0.0.1:8000
+python3.12 -m venv .venv && source .venv/bin/activate   # kokoro needs Python >=3.10,<3.13
+pip install -r requirements.txt                          # torch arrives as a kokoro dependency
+uvicorn app.main:app --reload                            # open http://127.0.0.1:8000
 ```
-
-## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -v
+# TTS: text → speech
+curl -X POST localhost:8000/synthesize \
+  -H 'content-type: application/json' \
+  -d '{"text":"Hello from Kokoro on AWS Fargate.","voice":"af_heart"}' --output hello.wav
+
+# ASR: speech → text
+curl -X POST localhost:8000/transcribe -F file=@hello.wav
 ```
+
+**Tests** (no model or network needed — `SKIP_MODEL_LOAD=1` is set inside them):
+
+```bash
+pip install -r requirements-dev.txt && pytest -v
+```
+
+---
 
 ## Deploy
 
 ```bash
 cd infra
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-cdk bootstrap        # once per account+region
-cdk deploy InfraStack
-# tear down everything: cdk destroy InfraStack
+cdk bootstrap                 # once per account + region
+cdk deploy OidcStack          # once — creates the GitHub OIDC deploy role
+cdk deploy InfraStack         # power on — prints the demo URL (changes each deploy)
+cdk destroy InfraStack        # power off → $0
 ```
 
-CI/CD: merges to `main` auto-deploy via GitHub Actions OIDC. Include
-`[skip deploy]` in the commit message to land changes while the stack stays
-destroyed; trigger manual deploys from the Actions tab (`workflow_dispatch`).
+**CI/CD:** merges to `main` auto-deploy via GitHub Actions OIDC. Add `[skip deploy]` to a commit message to
+land changes while the stack stays destroyed; trigger manual deploys from the **Actions** tab (`workflow_dispatch`).
+Forking? Point `GITHUB_REPO` (`infra/infra/oidc_stack.py`) and `ROLE_ARN` (`.github/workflows/deploy.yml`) at your
+own account first.
 
-## Before first deploy — replace CHANGE_ME
+---
 
-| File | What | Status |
-|------|------|--------|
-| `infra/infra/oidc_stack.py` | `GITHUB_REPO` — your `user/repo` | done |
-| `.github/workflows/deploy.yml` | `ROLE_ARN` — account ID (from `cdk deploy OidcStack` output) | done |
-| `training/merge_and_convert.sh` | `BUCKET` — your S3 bucket | TODO (Phase 2) |
-| `training/launch_sagemaker.py` | `ROLE`, `BUCKET` | TODO (Phase 2) |
+## Training track (Phase 2)
 
-## Measured performance
+A GPU fine-tuning path that feeds the **CPU** serving endpoint — decoupled so the service ships today and the
+better model drops in later with **zero code change** (just point `ASR_MODEL` at the converted weights).
 
-Same ~7-second sentence, warm service:
+```mermaid
+flowchart LR
+    subgraph gpu ["GPU · deferred — g5.xlarge Spot / SageMaker"]
+        D[("FLEURS zh + en<br/>per-language tokens")] --> T["Whisper-large-v3<br/>+ LoRA · PEFT 8-bit<br/>~1% params trainable"]
+        T --> AD["LoRA adapter"]
+    end
+    AD --> M["merge_and_unload()"]
+    M --> Q["CTranslate2<br/>int8 quantize"]
+    subgraph cpu ["CPU serving · live today"]
+        S["faster-whisper<br/>ASR_MODEL env<br/>(zero code change)"]
+    end
+    Q --> S
+```
 
-| Environment | RTF (synthesis time ÷ audio duration) |
-|---|---|
-| Apple Silicon dev box (CPU) | 0.11 |
-| Fargate 1 vCPU Graviton | 2.4 |
-| Fargate 2 vCPU, default math | ~~0.82~~ — retracted: fast-math kernel path audibly degraded the vocoder output |
-| **Fargate 2 vCPU, fp32 + single thread** | **1.48 — audio verified identical to local** (spectral distance 1.67 dB ≈ run-to-run noise floor) |
+- **Bilingual by construction:** each FLEURS sample is tokenized with its own language token
+  (`set_prefix_tokens(language=...)`) *before* the zh + en sets are concatenated — otherwise the model
+  learns the wrong prefix.
+- **Evaluation harness — with real numbers:** `evaluate_cer.py` reports **CER for Chinese** (no word boundaries) and
+  **WER for English**, before/after the adapter. Baseline smoke-test today (`whisper-tiny`, FLEURS, n=100, *no fine-tuning yet*):
+  **CER(zh) = 0.70 · WER(en) = 0.31**. The weak Chinese baseline is precisely what the bilingual LoRA targets — the
+  large-v3 before/after lands with Phase 2b.
+- **Runnable everywhere:** `train.py` does a Mac CPU smoke test; `launch_sagemaker.py` runs a managed Spot job;
+  `training/colab_finetune.ipynb` fine-tunes on a free Colab T4.
 
-**War story**: on Graviton, PyTorch's multi-threaded oneDNN/ACL kernel path
-audibly corrupts vocoder output (-4 dB level, 6.7 dB spectral distance vs
-identical-image local runs). Diagnosed via spectral A/B against a
-synthesis-randomness baseline and same-image bisection; a second bisection
-(F32 pinned, threads released) proved the parallel kernel path itself — not
-fast-math — is the culprit. Fix: `OMP_NUM_THREADS=1`, deployed through the
-pipeline. Moral: speed numbers mean nothing without a quality regression
-check.
+---
 
-Load test (`hey`, single 2 vCPU task): c=1 → p50 6.8 s; c=4 → p50 22 s,
-16/16 HTTP 200, throughput flat — textbook single-task CPU saturation.
-Scale out with `desired_count`, not bigger tasks.
+## Phase 3 — async avatar pipeline (scaffolded)
 
-Observability: CloudWatch alarms (ALB 5xx, CPU > 85%) defined in CDK,
-notifying via SNS email.
+`POST /avatar` synthesizes speech, drops it on a queue, and returns a job id; a GPU worker that **scales to zero**
+renders a MuseTalk talking-head and hands back a presigned MP4. The API degrades cleanly (**503**) until the stack
+is deployed.
 
-## Cost
+```mermaid
+flowchart LR
+    U(["POST /avatar"]) --> API["FastAPI<br/>TTS → S3, enqueue job"]
+    API --> Q[["SQS jobs<br/>+ DLQ ×3"]]
+    API --> DB[("DynamoDB<br/>job status")]
+    subgraph asg ["Auto Scaling Group · scales 0 ⇄ 1 on queue depth"]
+        W["g4dn.xlarge Spot · T4<br/>MuseTalk worker"]
+    end
+    Q --> W
+    W --> S3[("S3 · MP4 out<br/>7-day lifecycle")]
+    W -. status .-> DB
+    S3 --> URL(["presigned URL"])
+```
 
-~$74/mo always-on at 2 vCPU (Fargate $57 + ALB $16). `cdk destroy` → $0.
-Training runs: $2–7 each on g5.xlarge Spot.
+```bash
+cdk deploy --context avatar=true --context avatar_ami=ami-XXXX --all
+```
+
+---
 
 ## Roadmap
 
-- [x] Phase 1 — TTS service: Fargate + CDK + OIDC CI/CD
-- [x] Phase 2a (serving) — `/transcribe` live on base Whisper (faster-whisper, CPU)
-- [ ] Phase 2b (training) — swap in a LoRA-fine-tuned, CT2-int8 model via `ASR_MODEL`
-      (deferred until GPU quota; `training/` scripts ready)
-- [ ] Phase 3 — talking-head avatar (MuseTalk): `POST /avatar` → SQS → scale-to-zero
-      GPU worker (g4dn Spot ASG, golden AMI) → MP4 via presigned URL.
-      Code is in place (`avatar_worker/`, `infra/infra/avatar_stack.py`); deploy with
-      `cdk deploy --context avatar=true --context avatar_ami=ami-XXX --all`
+- [x] **Phase 1** — TTS service: Fargate + CDK + OIDC CI/CD
+- [x] **Phase 2a** — `/transcribe` live on base Whisper (faster-whisper, CPU, int8)
+- [ ] **Phase 2b** — swap in the LoRA-fine-tuned, CT2-int8 model via `ASR_MODEL` *(deferred until GPU quota; `training/` is ready)*
+- [ ] **Phase 3** — talking-head avatar (MuseTalk): `/avatar` → SQS → scale-to-zero GPU worker → MP4 *(code in place)*
 
-## Docs & License
+---
 
-- `CLAUDE.md` — architecture notes and load-bearing constraints for contributors/agents.
-- Licensed under the MIT License — see [LICENSE](LICENSE).
+## Repo layout
+
+```
+app/            FastAPI service — /synthesize (Kokoro TTS), /transcribe (Whisper ASR), /avatar (dormant)
+infra/          AWS CDK (Python) — InfraStack (Fargate/ALB/alarms), OidcStack (CI trust), AvatarStack (Phase 3)
+training/       Whisper LoRA — train.py, evaluate_cer.py, merge_and_convert.sh, launch_sagemaker.py, Colab notebook
+avatar_worker/  SQS-driven MuseTalk GPU worker (Phase 3)
+Dockerfile      ARM64 image — torch 2.12.0 pinned, TTS + ASR weights baked in
+.github/        GitHub Actions OIDC CI/CD (test → deploy, with a paths-ignore prod guard)
+```
+
+`CLAUDE.md` documents the load-bearing constraints (why `OMP_NUM_THREADS=1` must not be "optimized away", etc.)
+for contributors and coding agents.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
