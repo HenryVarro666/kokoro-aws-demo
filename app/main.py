@@ -78,8 +78,8 @@ def synthesize(req: SynthRequest):
 def get_asr():
     if "m" not in _asr:
         from faster_whisper import WhisperModel  # lazy: CI/tests don't load it
-        # cpu_threads set explicitly so it is unaffected by OMP_NUM_THREADS=1
-        # (that env var exists only to keep the Kokoro/torch vocoder clean).
+        # cpu_threads set explicitly so ASR is unaffected by OMP_NUM_THREADS=1
+        # (a legacy env var; the real vocoder fix is mkldnn disabled in get_pipeline).
         _asr["m"] = WhisperModel(ASR_MODEL, device="cpu", compute_type="int8",
                                  cpu_threads=2)
     return _asr["m"]
