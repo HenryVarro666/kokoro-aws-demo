@@ -112,7 +112,7 @@ The "why" behind the code — each of these is a deliberate call, not a default:
 | **Model weights baked into the image** | Deploy == ready: no cold-start downloads, and rollback is just switching an image tag. |
 | **Circuit breaker + auto-rollback** | A bad image fails fast and reverts instead of hanging ~3h; `min 100%` keeps the old task serving. |
 | **`paths-ignore` on docs & training** | Defense-in-depth after a "training commit redeployed prod" incident — ML/doc commits never touch the live service. |
-| **`/transcribe` is a *sync* def** | faster-whisper is CPU-bound/blocking; a sync endpoint runs in FastAPI's threadpool so a long job can't starve the event loop and hang `/health` (which would make the ALB kill the task). Guarded by a regression test. Its `cpu_threads=2` is pinned separately from the vocoder's `OMP_NUM_THREADS=1`. |
+| **`/transcribe` is a *sync* def** | faster-whisper is CPU-bound/blocking; a sync endpoint runs in FastAPI's threadpool so a long job can't starve the event loop and hang `/health` (which would make the ALB kill the task). Guarded by a regression test. Its `cpu_threads=2` is pinned independently of the (now-legacy) `OMP_NUM_THREADS=1`. |
 | **Scale-to-zero GPU worker** | The Phase-3 avatar ASG runs **0** instances when idle; a g4dn Spot spins up only on SQS depth, then scales *itself* back to 0. |
 
 ---
@@ -238,8 +238,8 @@ Dockerfile      ARM64 image — torch 2.12.0 pinned, TTS + ASR weights baked in
 .github/        GitHub Actions OIDC CI/CD (test → deploy, with a paths-ignore prod guard)
 ```
 
-`CLAUDE.md` documents the load-bearing constraints (why `OMP_NUM_THREADS=1` must not be "optimized away", etc.)
-for contributors and coding agents.
+`CLAUDE.md` documents the load-bearing constraints (e.g. why the Kokoro vocoder needs
+`torch.backends.mkldnn.enabled=False` on Graviton) for contributors and coding agents.
 
 ## License
 
