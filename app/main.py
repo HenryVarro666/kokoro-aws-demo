@@ -17,6 +17,14 @@ _asr = {}
 def get_pipeline(lang_code: str):
     # 'a' = American English, 'z' = Mandarin
     if lang_code not in _pipelines:
+        import torch
+        # Graviton/aarch64: torch's oneDNN (ACL) CPU backend corrupts the Kokoro
+        # vocoder — -6 dB level, ~8 dB log-mel spectral distance vs a golden local
+        # run, INDEPENDENT of thread count on the pinned torch==2.12.0.
+        # OMP_NUM_THREADS=1 does NOT fix it; disabling the oneDNN backend does
+        # (restores golden-matching audio, 0.8 dB = run-to-run noise floor).
+        # Verified by golden-referenced spectral A/B on Fargate, 2026-07.
+        torch.backends.mkldnn.enabled = False
         from kokoro import KPipeline  # lazy import so CI tests don't need the model
         _pipelines[lang_code] = KPipeline(
             lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")

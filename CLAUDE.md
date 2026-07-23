@@ -34,10 +34,14 @@ python train.py --model_id openai/whisper-tiny --train_samples 32 --epochs 1 --b
 - **Push to main auto-deploys** via GitHub Actions OIDC. If the stack is meant to stay
   destroyed, include `[skip deploy]` in the commit message. Manual deploys: Actions tab
   -> Run workflow.
-- **OMP_NUM_THREADS=1 on Fargate is load-bearing**: multi-threaded oneDNN/ACL kernels on
-  Graviton audibly corrupt the vocoder output (-4 dB, 6.7 dB spectral distance). Verified
-  by bisection. Do not "optimize" it away without re-running the spectral A/B
-  (golden ref vs cloud output, threshold < 2 dB).
+- **`torch.backends.mkldnn.enabled = False` is load-bearing** (set in `app/main.py`
+  `get_pipeline`): torch's oneDNN(ACL) CPU backend silently corrupts the Kokoro vocoder on
+  Graviton/aarch64 (-6 dB, ~8 dB spectral distance vs a golden local run), INDEPENDENT of
+  thread count on torch 2.12.0. The old `OMP_NUM_THREADS=1` workaround (blaming multi-threaded
+  kernels) stopped working after a torch bump — the single-threaded service was still corrupted.
+  The `OMP_NUM_THREADS=1` / `DNNL_DEFAULT_FPMATH_MODE=F32` env vars are now inert belt-and-suspenders.
+  Verified 2026-07 by golden-referenced spectral A/B on Fargate (fix -> 0.8 dB = noise floor).
+  Re-verify against a GOLDEN reference (Apple Silicon), NOT cloud-vs-cloud, before changing.
 - torch is version-pinned in the Dockerfile for the same reason.
 - Bilingual training requires per-sample language tokens: tokenize each FLEURS config
   with `set_prefix_tokens(language=...)` before concatenating (see train.py).

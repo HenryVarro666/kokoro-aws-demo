@@ -70,26 +70,32 @@ flowchart LR
 
 ## ⚡ Engineering war story — the Graviton vocoder bug
 
-> On Graviton, PyTorch's **multi-threaded oneDNN/ACL kernel path audibly corrupts the vocoder output**
-> (−4 dB level, **6.7 dB spectral distance** vs. identical local runs). I caught it because a "faster"
-> 2 vCPU config *sounded wrong*, not because a test failed.
+Kokoro on Fargate/Graviton shipped **audibly degraded, "robotic" speech**. I caught it by ear — a
+synthesized clip *sounded wrong* — not from a failing test.
 
-Diagnosed by **spectral A/B** against a synthesis-randomness baseline plus **same-image bisection**. A second
-bisection (fp32 pinned, threads released) proved the *parallel kernel path itself* — not fast-math — was the
-culprit: degradation tracks `OMP_NUM_THREADS` exactly (6.7 dB at 2 threads, **1.67 dB at 1 thread ≈ run-to-run
-noise floor**). **Fix:** `OMP_NUM_THREADS=1`, shipped through the pipeline.
+**Diagnose against a *golden* reference, not an internal one.** Synthesizing the same text on the
+Graviton service vs. locally on Apple Silicon (the golden reference) exposed it: the cloud output was
+**−6 dB quieter, ~8 dB log-mel spectral distance**, with smeared harmonics (panel ②).
 
-Same ~7-second sentence, warm service:
+![Kokoro vocoder on Graviton — the oneDNN corruption and its fix](docs/vocoder_ab.png)
 
-| Environment | RTF (synth time ÷ audio duration) | Audio quality |
-|---|---|---|
-| Apple Silicon dev box (CPU) | **0.11** | reference |
-| Fargate 1 vCPU Graviton | 2.4 | clean |
-| Fargate 2 vCPU, default math | ~~0.82~~ | ❌ **retracted** — vocoder audibly degraded |
-| **Fargate 2 vCPU, fp32 + single thread** | **1.48** | ✅ verified identical (1.67 dB ≈ noise floor) |
+**Root cause:** PyTorch's **oneDNN (ACL) CPU backend on aarch64** miscomputes the vocoder's convolutions —
+**independent of thread count**, on the pinned `torch==2.12.0`. An earlier workaround (`OMP_NUM_THREADS=1`,
+on the theory that multi-threaded kernels were the culprit) turned out **insufficient**: the single-threaded
+service was *still* corrupted (panel ②).
 
-**Load test** (`hey`, single 2 vCPU task): `c=1 →` p50 6.8 s; `c=4 →` p50 22 s, 16/16 HTTP 200, throughput flat —
-textbook single-task CPU saturation. **Scale out with `desired_count`, not bigger tasks.**
+**Fix — one line, disable the oneDNN backend before the vocoder runs:**
+
+```python
+torch.backends.mkldnn.enabled = False   # app/main.py, in get_pipeline()
+```
+
+This restores golden-matching audio — **0.8 dB spectral distance = the run-to-run noise floor** (panel ③).
+Verified by a golden-referenced spectral A/B on Fargate *and* on the live redeployed service.
+
+> **Lessons:** (1) a "faster" config that *sounds* wrong beats a green test suite; (2) always A/B against a
+> **golden** reference — comparing cloud-to-cloud once hid this bug in plain sight; (3) re-verify old
+> "fixes": the `OMP_NUM_THREADS=1` workaround had silently decayed after a `torch` bump.
 
 ---
 
@@ -99,7 +105,7 @@ The "why" behind the code — each of these is a deliberate call, not a default:
 
 | Decision | Why |
 |---|---|
-| **`OMP_NUM_THREADS=1` on Graviton** | Multi-threaded kernels corrupt the vocoder (see war story). fp32 kept as cheap insurance. |
+| **`torch.backends.mkldnn.enabled=False`** | torch's oneDNN (ACL) backend corrupts the Kokoro vocoder on Graviton, *thread-independently* (see war story). Disabling it restores golden audio; the older `OMP_NUM_THREADS=1` guard proved insufficient. |
 | **NAT-less VPC** (public subnets) | A NAT gateway is ~$32/mo — the classic beginner bill trap. Tasks pull images via public IP instead. |
 | **OIDC, not access keys** | Actions assumes a repo-scoped role via web identity — no long-lived secrets to leak or rotate. |
 | **Model weights baked into the image** | Deploy == ready: no cold-start downloads, and rollback is just switching an image tag. |
