@@ -40,15 +40,12 @@ class InfraStack(Stack):
             "..", platform=ecr_assets.Platform.LINUX_ARM64
         )
 
-        # Audio-quality fix: on Graviton, multi-threaded oneDNN/ACL kernels
-        # (enabled once the task has >=2 vCPU) audibly degrade the vocoder
-        # output (-4 dB level, spectral artifacts). Pin fp32 math and a single
-        # torch thread; verified by A/B spectral comparison against local runs.
-        # Bisection verdict (2026-06-12): degradation tracks OMP_NUM_THREADS
-        # exactly (6.7 dB spectral distance at 2 threads even with F32 pinned;
-        # 1.67 dB at 1 thread). Culprit is the parallel oneDNN/ACL kernel path
-        # on Graviton, not fast-math. Single thread is mandatory for clean
-        # audio; F32 kept as cheap insurance. Honest RTF at 2 vCPU: 1.48.
+        # Audio-quality note: on Graviton/aarch64, torch's oneDNN(ACL) CPU backend
+        # corrupts the Kokoro vocoder (-6 dB level, ~8 dB spectral distance vs a
+        # golden local run) INDEPENDENT of thread count. The real fix lives in app
+        # code (torch.backends.mkldnn.enabled=False in get_pipeline); verified
+        # 2026-07 by golden-referenced spectral A/B on Fargate. These env vars were
+        # an earlier (insufficient) workaround, kept as inert belt-and-suspenders.
         env = {
             "DNNL_DEFAULT_FPMATH_MODE": "F32",
             "OMP_NUM_THREADS": "1",
