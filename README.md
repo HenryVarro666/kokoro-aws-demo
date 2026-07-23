@@ -90,8 +90,9 @@ service was *still* corrupted (panel ②).
 torch.backends.mkldnn.enabled = False   # app/main.py, in get_pipeline()
 ```
 
-This restores golden-matching audio — **0.8 dB spectral distance = the run-to-run noise floor** (panel ③).
-Verified by a golden-referenced spectral A/B on Fargate *and* on the live redeployed service.
+This restores golden-matching audio — **0.8 dB spectral distance = the run-to-run noise floor** (panel ③) —
+and it's **latency-neutral** (end-to-end RTF ≈ 1.5 on the 2 vCPU Graviton task, unchanged). Verified by a
+golden-referenced spectral A/B on Fargate *and* on the live redeployed service (0.74 dB vs golden).
 
 > **Lessons:** (1) a "faster" config that *sounds* wrong beats a green test suite; (2) always A/B against a
 > **golden** reference — comparing cloud-to-cloud once hid this bug in plain sight; (3) re-verify old
