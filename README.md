@@ -21,6 +21,22 @@ and a scale-to-zero avatar pipeline.
 
 </div>
 
+<!-- problem-framing:start -->
+
+## Problem and evidence
+
+> **Can an AWS speech service preserve reference audio and transcription quality across deployment changes while meeting a measured latency and operating-cost budget?**
+
+**Why it matters:** A healthy endpoint can still return degraded speech. Deployable speech systems need quality checks alongside availability, infrastructure reproducibility and cost control.
+
+**Central tension:** CPU serving, model conversion and asynchronous GPU jobs can reduce operating cost, but introduce backend differences, cold starts and failure paths. A local model test does not establish cloud audio equivalence or concurrent service capacity.
+
+[Full problem and verification plan](PROBLEM.md) · [Reusable framing prompt](PROBLEM_PROMPT.md)
+
+<!-- problem-framing:end -->
+
+
+
 ---
 
 ## At a glance
