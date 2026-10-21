@@ -1,12 +1,8 @@
 <div align="center">
 
-# 🎙️ kokoro-aws-demo
+# kokoro-aws-demo
 
-**Open-weight speech AI — TTS *and* ASR — shipped as a production-style service on AWS.**
-
-Kokoro-82M text-to-speech on **ECS Fargate / Graviton**, a CPU Whisper transcription endpoint,
-100% **AWS CDK** infrastructure, and **keyless OIDC CI/CD** — plus a GPU **LoRA fine-tuning** track
-and a scale-to-zero avatar pipeline.
+**Open-weight speech AI — TTS and ASR — shipped as a production-style service on AWS.**
 
 [![CI](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
@@ -14,10 +10,9 @@ and a scale-to-zero avatar pipeline.
 ![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900)
 ![Graviton](https://img.shields.io/badge/Graviton-ARM64-0091BD?logo=arm&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3DA639)
+[![homepage](https://img.shields.io/badge/homepage-ccao2679.com-555555)](https://www.ccao2679.com/projects/#kokoro-aws-demo)
 
-<img src="docs/demo.png" alt="Kokoro TTS + Whisper ASR browser demo, served from a single AWS Fargate task" width="680">
-
-<sub><em>One Fargate task, one page: type text → hear 24 kHz speech, or upload audio → get a transcript. Bilingual (EN/中文).</em></sub>
+<img src="docs/figures/overview.png" alt="Overview poster: git push to OIDC CI/CD, ARM64 image in ECR, Fargate on Graviton serving /synthesize and /transcribe, about $74 a month" width="100%">
 
 </div>
 
@@ -36,6 +31,12 @@ and a scale-to-zero avatar pipeline.
 | **Cost** | **~$74/mo** always-on · `cdk destroy` → **$0** · training runs $2–7 each on Spot |
 
 ---
+
+### Demo
+
+<p align="center"><img src="docs/demo.png" alt="Kokoro TTS + Whisper ASR browser demo, served from a single AWS Fargate task" width="640"></p>
+
+<p align="center"><sub><em>One Fargate task, one page: type text → hear 24 kHz speech, or upload audio → get a transcript. Bilingual (EN/中文).</em></sub></p>
 
 ## Architecture
 
