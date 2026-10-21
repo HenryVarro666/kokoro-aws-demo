@@ -25,6 +25,13 @@ and a scale-to-zero avatar pipeline.
 
 ## At a glance
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/overview-dark.svg">
+    <img src="docs/overview-light.svg" alt="Overview: git push, GitHub Actions with OIDC, ECR, then ECS Fargate on Graviton behind an ALB serving /synthesize and /transcribe" width="560">
+  </picture>
+</p>
+
 |  |  |
 |---|---|
 | **Serving** | FastAPI on **ECS Fargate** (ARM64 / Graviton), 2 vCPU · 6 GB, behind an Application Load Balancer |
