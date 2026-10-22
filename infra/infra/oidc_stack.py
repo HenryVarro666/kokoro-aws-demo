@@ -1,7 +1,9 @@
 from aws_cdk import CfnOutput, Stack, aws_iam as iam
 from constructs import Construct
 
-GITHUB_REPO = "HenryVarro666/kokoro-aws-demo"
+# The repository was renamed from kokoro-aws-demo; both names are trusted so deploys keep working
+# whichever name GitHub puts in the OIDC token.
+GITHUB_REPOS = ["HenryVarro666/kokoro-whisper-fargate", "HenryVarro666/kokoro-aws-demo"]
 
 
 class OidcStack(Stack):
@@ -30,7 +32,7 @@ class OidcStack(Stack):
                         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
                     },
                     "StringLike": {
-                        "token.actions.githubusercontent.com:sub": f"repo:{GITHUB_REPO}:*"
+                        "token.actions.githubusercontent.com:sub": [f"repo:{r}:*" for r in GITHUB_REPOS]
                     },
                 },
             ),

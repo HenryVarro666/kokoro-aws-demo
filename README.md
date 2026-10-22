@@ -1,18 +1,18 @@
 <div align="center">
 
-# kokoro-aws-demo
+# Kokoro + Whisper on AWS Fargate
 
 **English** · [简体中文](README.zh-CN.md)
 
 **Open-weight speech AI — TTS and ASR — shipped as a production-style service on AWS.**
 
-[![CI](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml)
+[![CI](https://github.com/HenryVarro666/kokoro-whisper-fargate/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-whisper-fargate/actions/workflows/deploy.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900)
 ![Graviton](https://img.shields.io/badge/Graviton-ARM64-0091BD?logo=arm&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3DA639)
-[![homepage](https://img.shields.io/badge/homepage-ccao2679.com-555555)](https://www.ccao2679.com/projects/#kokoro-aws-demo)
+[![homepage](https://img.shields.io/badge/homepage-ccao2679.com-555555)](https://www.ccao2679.com/projects/#kokoro-whisper-fargate)
 
 <img src="docs/figures/overview.png" alt="Overview poster: git push to OIDC CI/CD, ARM64 image in ECR, Fargate on Graviton serving /synthesize and /transcribe, about $74 a month" width="100%">
 

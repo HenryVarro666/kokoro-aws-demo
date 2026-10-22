@@ -1,18 +1,18 @@
 <div align="center">
 
-# kokoro-aws-demo
+# Kokoro + Whisper on AWS Fargate
 
 [English](README.md) · **简体中文**
 
 **开源权重的语音 AI（TTS 与 ASR），以生产级服务的形态部署在 AWS 上。**
 
-[![CI](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml)
+[![CI](https://github.com/HenryVarro666/kokoro-whisper-fargate/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-whisper-fargate/actions/workflows/deploy.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900)
 ![Graviton](https://img.shields.io/badge/Graviton-ARM64-0091BD?logo=arm&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-3DA639)
-[![homepage](https://img.shields.io/badge/homepage-ccao2679.com-555555)](https://www.ccao2679.com/projects/#kokoro-aws-demo)
+[![homepage](https://img.shields.io/badge/homepage-ccao2679.com-555555)](https://www.ccao2679.com/projects/#kokoro-whisper-fargate)
 
 <img src="docs/figures/overview.png" alt="概览海报：git push 触发 OIDC CI/CD，ARM64 镜像存入 ECR，Graviton 上的 Fargate 提供 /synthesize 和 /transcribe，每月约 $74" width="100%">
 
