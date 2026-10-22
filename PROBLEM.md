@@ -11,3 +11,5 @@
 **Acceptance test:** Replay a fixed bilingual corpus through a pinned local reference and the deployed candidate. Record transcription error, audio regression checks, failures, cold/warm latency distributions and resource use under stated concurrency. Exercise model load failure and asynchronous job retries. Promote a change only when its quality and operational checks pass; report unavailable phases separately.
 
 The comparison is prospective. Existing service status and historical costs must be checked before reuse.
+
+中文版：[PROBLEM.zh.md](PROBLEM.zh.md)

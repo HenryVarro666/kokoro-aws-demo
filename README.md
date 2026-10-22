@@ -2,6 +2,8 @@
 
 # kokoro-aws-demo
 
+**English** · [简体中文](README.zh-CN.md)
+
 **Open-weight speech AI — TTS and ASR — shipped as a production-style service on AWS.**
 
 [![CI](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml/badge.svg)](https://github.com/HenryVarro666/kokoro-aws-demo/actions/workflows/deploy.yml)
@@ -28,7 +30,7 @@
 
 **Central tension:** CPU serving, model conversion and asynchronous GPU jobs can reduce operating cost, but introduce backend differences, cold starts and failure paths. A local model test does not establish cloud audio equivalence or concurrent service capacity.
 
-[Full problem and verification plan](PROBLEM.md)
+[Full problem and verification plan](PROBLEM.md) · [中文](PROBLEM.zh.md)
 
 <!-- problem-framing:end -->
 
@@ -58,19 +60,33 @@ From `git push` to a live URL, with no AWS keys ever stored in the repo:
 
 ```mermaid
 flowchart LR
-    A(["git push → main"]) --> B
-    subgraph ci ["GitHub Actions · OIDC federation (no stored keys)"]
-        B["pytest"] --> C["cdk deploy"]
+    subgraph gha ["GitHub Actions · deploy.yml"]
+        T["test job<br/>pytest"] --> DJ["deploy job<br/>ubuntu-24.04-arm"]
     end
-    C --> D[("ECR<br/>ARM64 image<br/>model weights baked in")]
+    U(["browser / curl"])
     subgraph aws ["AWS · us-east-1"]
-        E["ECS Fargate service<br/>Graviton · 2 vCPU / 6 GB<br/>FastAPI: /synthesize · /transcribe"]
-        F(["Application<br/>Load Balancer"]) --> E
-        G["CloudWatch alarms<br/>ALB 5xx · CPU &gt; 85%"] -.-> H(["SNS email"])
+        R["IAM role (OidcStack)<br/>github-deploy-kokoro"]
+        ECR[("ECR<br/>ARM64 image")]
+        ALB(["Application<br/>Load Balancer"])
+        subgraph task ["Fargate task (InfraStack) · Graviton"]
+            API["app/main.py<br/>FastAPI"]
+            K["Kokoro-82M<br/>/synthesize"]
+            W["faster-whisper base<br/>/transcribe"]
+        end
+        CW["CloudWatch alarms<br/>5xx · CPU > 85%"] --> SNS(["SNS email"])
     end
-    D --> E
-    U(["🌐 browser demo"]) --> F
+    DJ -- "OIDC token" --> R
+    R -- "cdk deploy InfraStack" --> ECR
+    ECR -. "image" .-> API
+    U --> ALB
+    ALB -- "requests · /health" --> API
+    API --> K
+    API --> W
+    ALB -. "5xx" .-> CW
+    API -. "CPU" .-> CW
 ```
+
+The top row is the deploy path: on a push to `main` the `deploy` job runs only after `pytest` passes and the commit message lacks `[skip deploy]`; it trades a GitHub OIDC token for the `OidcStack` role, and `cdk deploy` builds the ARM64 image into ECR and rolls the Fargate service. The bottom row is the request path: the ALB forwards requests and `/health` checks to one FastAPI task that holds both models, while dotted lines mark the image pull and the two alarm metrics.
 
 ### Endpoints
 
